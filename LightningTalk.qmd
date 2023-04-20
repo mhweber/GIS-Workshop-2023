@@ -68,7 +68,7 @@ Over 600 Watershed and Catchment (Local Drainage Area) metrics for all NHDPlusV2
 
 Load `StreamCatTools` library and see what parameters are available
 
-```{r, echo=TRUE, message=FALSE}
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
 library(StreamCatTools)
 region_params <- sc_get_params(param='areaOfInterest')
 
@@ -82,7 +82,7 @@ print(paste0('A selection of available StreamCat metrics include: ',paste(name_p
 
 Here we're asking for an NLCD variable, dam density, and TRI density at the riparian buffer level, catchment level, and watershed level
 
-```{r, echo=TRUE, message=FALSE}
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
 df <- sc_get_data(metric='PctUrbMd2006,DamDens,TRIDens', aoi='riparian_catchment,catchment,watershed', comid='179,1337,1337420')
 knitr::kable(df)
 ```
@@ -95,7 +95,7 @@ knitr::kable(df)
 
 Use `nhdplusTools` to grab NHDPlusV2 flowlines for the Calapooia River basin using pour point identifier and using the [Network Linked Data Index](https://waterdata.usgs.gov/blog/nldi-intro/) API
 
-```{r, echo=TRUE, message=FALSE}
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
 start_comid = 23763529
 nldi_feature <- list(featureSource = "comid", featureID = start_comid)
 
@@ -106,7 +106,7 @@ flowline_nldi <- nhdplusTools::navigate_nldi(nldi_feature, mode = "UT", data_sou
 
 Use `mapview` for a quick leaflet map
 
-```{r, echo=TRUE, message=FALSE}
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
 library(mapview)
 mapviewOptions(fgb=FALSE)
 mapview::mapview(flowline_nldi, legend=FALSE, color='blue')
@@ -114,7 +114,7 @@ mapview::mapview(flowline_nldi, legend=FALSE, color='blue')
 
 ## Gather StreamCat Data for Calapooia
 
-```{r, echo=TRUE, message=FALSE}
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
 flowline_nldi <- flowline_nldi$UT_flowline
 comids <- paste(flowline_nldi$nhdplus_comid,collapse=",",sep="")
 
@@ -125,7 +125,7 @@ knitr::kable(df[1:5,])
 
 ## Map NLCD Percent Cropland for *Catchments*
 
-```{r, echo=TRUE, message=FALSE}
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
 basin <- nhdplusTools::get_nldi_basin(nldi_feature = nldi_feature)
 flowline_nldi$PCTCROP2019CAT <- df$PCTCROP2019CAT[match(flowline_nldi$nhdplus_comid, df$COMID)]
 mapview::mapview(basin, alpha.regions=.08) + mapview::mapview(flowline_nldi, zcol = "PCTCROP2019CAT", legend = TRUE)
@@ -133,7 +133,7 @@ mapview::mapview(basin, alpha.regions=.08) + mapview::mapview(flowline_nldi, zco
 
 ## Map NLCD Percent Cropland for *Watershed*
 
-```{r, echo=TRUE, message=FALSE}
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
 flowline_nldi$PCTCROP2019WS <- df$PCTCROP2019WS[match(flowline_nldi$nhdplus_comid, df$COMID)]
 mapview::mapview(basin, alpha.regions=.08) + mapview::mapview(flowline_nldi, zcol = "PCTCROP2019WS", legend = TRUE)
 ```
@@ -142,7 +142,7 @@ mapview::mapview(basin, alpha.regions=.08) + mapview::mapview(flowline_nldi, zco
 
 Identify NWIS sites in Calapooia Basin (only 1..) and get water temperature - plot against StreamCat predicted mean annual stream water temperature
 
-```{r, echo=FALSE, message=FALSE, out.width = '60%'}
+```{r, echo=FALSE, message=FALSE, , warning=FALSE, out.width = '60%'}
 library(dataRetrieval)
 library(ggplot2)
 library(dplyr)
