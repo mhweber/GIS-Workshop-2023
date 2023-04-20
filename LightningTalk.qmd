@@ -1,0 +1,202 @@
+---
+title: "Watershed data as web services in R and Python"
+subtitle: 'EPA GIS Workgroup Annual Meeting'
+date: "2023-04-25"
+author:
+    - Marc Weber
+    - Ryan Hill
+    - Allen Brookes
+    - David Rebhuhn
+    - Jesse Peters
+format:
+  revealjs:
+    embed-resources: true
+    auto-stretch: false
+    code-fold: true
+    code-tools: true
+editor: visual
+---
+
+## The Outline
+
+-   What is StreamCat?
+-   Description of API and Map / Menu interface to StreamCat API
+-   Working with StreamCat watershed data in R using `StreamCatTools` R package
+-   Working with StreamCat watershed data in Python using `pynhd` as part of the `HyRiver` python software stack
+
+## What is StreamCat?
+
+Over 600 Watershed and Catchment (Local Drainage Area) metrics for all NHDPlusV2 reaches in CONUS
+
+![](streamcat.png){width="50%" height="50%"}
+
+::: aside
+<https://www.epa.gov/national-aquatic-resource-surveys/streamcat-dataset>
+:::
+
+## Web Services for StreamCat
+
+![](streamcat_pages.png){width="200%" height="200%"}
+
+::: aside
+<https://www.epa.gov/national-aquatic-resource-surveys/streamcat-metrics-rest-api>
+
+<https://www.epa.gov/national-aquatic-resource-surveys/streamcat-metrics-and-definitions>
+:::
+
+## Web Services for StreamCat
+
+![](streamcat_map.png){width="200%" height="200%"}
+
+::: aside
+<https://www.epa.gov/national-aquatic-resource-surveys/streamcat-web-tool-map-view>
+:::
+
+## StreamCat Web Services in R Using `StreamCatTools`
+
+![](streamCatTools.png){width="65%" height="65%"}
+
+::: aside
+<https://usepa.github.io/StreamCatTools/>
+:::
+
+## Using StreamCat in R and in Python
+
+![](flowchart.png){width="200%" height="200%"}
+
+## StreamCat Web Services in R Using `StreamCatTools`
+
+Load `StreamCatTools` library and see what parameters are available
+
+```{r, echo=TRUE, message=FALSE}
+library(StreamCatTools)
+region_params <- sc_get_params(param='areaOfInterest')
+
+name_params <- sc_get_params(param='name')
+
+print(paste0('region parameters are: ', paste(region_params,collapse = ', ')))
+print(paste0('A selection of available StreamCat metrics include: ',paste(name_params[1:10],collapse = ', ')))
+```
+
+## Load Watershed Metrics Into a Dataframe in R
+
+Here we're asking for an NLCD variable, dam density, and TRI density at the riparian buffer level, catchment level, and watershed level
+
+```{r, echo=TRUE, message=FALSE}
+df <- sc_get_data(metric='PctUrbMd2006,DamDens,TRIDens', aoi='riparian_catchment,catchment,watershed', comid='179,1337,1337420')
+knitr::kable(df)
+```
+
+## Load NHDPlusV2 Reaches Using `nhdplusTools` in R
+
+![](nhdplusTools.png){width="75%" height="75%"}
+
+## Load NHDPlusV2 Reaches Using `nhdplusTools` in R
+
+Use `nhdplusTools` to grab NHDPlusV2 flowlines for the Calapooia River basin using pour point identifier and using the [Network Linked Data Index](https://waterdata.usgs.gov/blog/nldi-intro/) API
+
+```{r, echo=TRUE, message=FALSE}
+start_comid = 23763529
+nldi_feature <- list(featureSource = "comid", featureID = start_comid)
+
+flowline_nldi <- nhdplusTools::navigate_nldi(nldi_feature, mode = "UT", data_source = "flowlines", distance=5000)
+```
+
+## Map Stream Reaches
+
+Use `mapview` for a quick leaflet map
+
+```{r, echo=TRUE, message=FALSE}
+library(mapview)
+mapviewOptions(fgb=FALSE)
+mapview::mapview(flowline_nldi, legend=FALSE, color='blue')
+```
+
+## Gather StreamCat Data for Calapooia
+
+```{r, echo=TRUE, message=FALSE}
+flowline_nldi <- flowline_nldi$UT_flowline
+comids <- paste(flowline_nldi$nhdplus_comid,collapse=",",sep="")
+
+df <- sc_nlcd(year='2019', aoi='catchment,watershed',
+              comid=comids)
+knitr::kable(df[1:5,])
+```
+
+## Map NLCD Percent Cropland for *Catchments*
+
+```{r, echo=TRUE, message=FALSE}
+basin <- nhdplusTools::get_nldi_basin(nldi_feature = nldi_feature)
+flowline_nldi$PCTCROP2019CAT <- df$PCTCROP2019CAT[match(flowline_nldi$nhdplus_comid, df$COMID)]
+mapview::mapview(basin, alpha.regions=.08) + mapview::mapview(flowline_nldi, zcol = "PCTCROP2019CAT", legend = TRUE)
+```
+
+## Map NLCD Percent Cropland for *Watershed*
+
+```{r, echo=TRUE, message=FALSE}
+flowline_nldi$PCTCROP2019WS <- df$PCTCROP2019WS[match(flowline_nldi$nhdplus_comid, df$COMID)]
+mapview::mapview(basin, alpha.regions=.08) + mapview::mapview(flowline_nldi, zcol = "PCTCROP2019WS", legend = TRUE)
+```
+
+## Meld with Water Quality via Web Services
+
+Identify NWIS sites in Calapooia Basin (only 1..) and get water temperature - plot against StreamCat predicted mean annual stream water temperature
+
+```{r, echo=FALSE, message=FALSE, out.width = '60%'}
+library(dataRetrieval)
+library(ggplot2)
+library(dplyr)
+library(cowplot)
+
+wq <- findNLDI(comid = 23763529, nav="UT", find = "nwis")
+
+find <- whatNWISdata(sites = gsub(
+  "USGS-", "",
+  wq$UT_nwissite$identifier
+))  |> 
+  filter(
+    data_type_cd == "dv",
+    parm_cd == "00010",
+  )  |> 
+  mutate(identifier = paste0("USGS-", site_no))  |> 
+  inner_join(wq$UT_nwissite, by = "identifier")  |> 
+  sf::st_as_sf()
+
+# Extract water temp for identified sites
+Q <- readNWISdv(find$site_no,
+  parameterCd = "00010")  |> 
+  renameNWISColumns()
+
+# get StreamCat mean annual water temp
+comids <- paste(flowline_nldi$nhdplus_comid,collapse=",",sep="")
+df <- sc_get_data(metric='mast_2008', aoi='Other', comid=comids)
+flowline_nldi$MAST_2008 <- df$MAST_2008[match(flowline_nldi$nhdplus_comid, df$COMID)]
+
+# Plot!
+a <- ggplot() +
+  geom_line(
+    data = Q,
+    aes(x = Date, y = Wtemp, col = site_no),
+    size = .5
+  ) +
+  ylab('Water Temperature (C)') +
+  facet_wrap(~site_no, nrow = 4) +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set1") +
+  theme(legend.position = "none") 
+b <- ggplot() +
+  geom_sf(data = basin, col = NA) +
+  geom_sf(data = find, col='red') +
+  geom_sf(data = flowline_nldi, aes(color = MAST_2008)) +
+  labs(title = "Water Temperature",
+       caption = "Calapooia River, OR")+ 
+  scale_colour_continuous(name="StreamCat \nMean Annual \nStream Temp (C)")+ 
+  theme_void() +
+  theme(plot.title = element_text(face = "bold", hjust = .5)
+  )
+plot_grid(a, b)
+```
+
+## Now Let's Do the Same in Python!
+
+![](Dog.png)
